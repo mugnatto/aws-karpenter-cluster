@@ -78,6 +78,8 @@ aws eks update-kubeconfig --region <region> --name <cluster-name>
 ```
 
 ### 4. Deploy Karpenter NodePools
+```bash
 # Apply Karpenter NodePool configurations
 kubectl apply -f instances/spot-deployment.yaml
 kubectl apply -f instances/graviton-deployment.yaml
+```
