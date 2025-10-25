@@ -10,3 +10,16 @@ module "vpc" {
     ManagedBy   = "Terraform"
   }
 }
+
+module "eks" {
+  source = "./modules/eks"
+  
+  cluster_name = "${var.project_name}-${var.environment}"
+  subnet_ids = module.vpc.public_subnet_ids
+  vpc_id = module.vpc.vpc_id
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
