@@ -29,6 +29,11 @@ resource "kubernetes_manifest" "default_nodepool" {
               key      = "kubernetes.io/os"
               operator = "In"
               values   = ["linux"]
+            },
+            {
+              key      = "node.kubernetes.io/instance-type"
+              operator = "In"
+              values   = ["t3.medium", "t3.large", "t3.xlarge"]
             }
           ]
           nodeClassRef = {
@@ -44,7 +49,7 @@ resource "kubernetes_manifest" "default_nodepool" {
         memory = "50Gi"
       }
       disruption = {
-        consolidateAfter = "30s"
+        consolidateAfter = "5m"
         consolidationPolicy = "WhenEmptyOrUnderutilized"
       }
     }
@@ -116,7 +121,7 @@ resource "kubernetes_manifest" "graviton_nodepool" {
         memory = "50Gi"
       }
       disruption = {
-        consolidateAfter = "30s"
+        consolidateAfter = "5m"
         consolidationPolicy = "WhenEmptyOrUnderutilized"
       }
     }

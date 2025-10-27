@@ -415,6 +415,37 @@ Karpenter automatically generates the appropriate UserData for Bottlerocket inst
 
 Reference: [Karpenter NodeClasses](https://karpenter.sh/docs/concepts/nodeclasses/)
 
+## Instance Configuration
+
+### NodePool Default (AMD64)
+- **Architecture**: AMD64 (x86_64)
+- **Instance Types**: Any AMD64 instance (no specific restrictions)
+- **Capacity Type**: Spot and On-Demand
+- **Limits**: 50 vCPUs, 50Gi RAM
+
+### NodePool Graviton (ARM64)
+- **Architecture**: ARM64 (Graviton)
+- **Specific Instance Types**:
+  - `m6g.medium` - 1 vCPU, 4 Gi RAM
+  - `m6g.large` - 2 vCPUs, 8 Gi RAM
+  - `m6g.xlarge` - 4 vCPUs, 16 Gi RAM
+  - `m6g.2xlarge` - 8 vCPUs, 32 Gi RAM
+  - `c6g.medium` - 1 vCPU, 2 Gi RAM
+  - `c6g.large` - 2 vCPUs, 4 Gi RAM
+  - `c6g.xlarge` - 4 vCPUs, 8 Gi RAM
+  - `c6g.2xlarge` - 8 vCPUs, 16 Gi RAM
+- **Capacity Type**: Spot and On-Demand
+- **Limits**: 50 vCPUs, 50Gi RAM
+
+### Common Configuration
+- **OS**: Bottlerocket (container-optimized)
+- **Storage**: EBS GP3 50Gi
+- **Instance Store**: RAID0 (when available)
+- **Expiration**: 24 hours
+- **Consolidation**: 30 seconds after empty/underutilized
+
+The project uses a hybrid strategy: generic AMD64 instances for general workloads and specific Graviton instances (m6g/c6g) for ARM64-optimized workloads.
+
 ## Cost Considerations
 
 Estimated monthly costs for development environment:
@@ -424,13 +455,14 @@ Estimated monthly costs for development environment:
 - NAT Gateway: $32/month
 - Data transfer and storage: $5-10/month
 
-Total estimated cost: $145-280/month
+**Total estimated cost: $145-280/month**
 
 Cost optimization is achieved through:
 - Spot instances (up to 90% savings vs On-Demand)
 - Automatic node consolidation
 - Minimal Fargate usage
 - Single NAT Gateway
+
 
 ## Monitoring
 

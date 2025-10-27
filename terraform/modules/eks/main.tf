@@ -231,6 +231,13 @@ resource "aws_eks_fargate_profile" "karpenter" {
     }
   }
 
+  selector {
+    namespace = "kube-system"
+    labels = {
+      "eks.amazonaws.com/component" = "coredns"
+    }
+  }
+
   tags = var.tags
 }
 

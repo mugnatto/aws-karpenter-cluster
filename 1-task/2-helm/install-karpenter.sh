@@ -64,11 +64,8 @@ helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter \
   --set "controller.resources.requests.memory=1Gi" \
   --set "controller.resources.limits.cpu=1" \
   --set "controller.resources.limits.memory=1Gi" \
-  --set "replicas=1"
-
-# Wait for Karpenter to be ready
-echo -e "${BLUE}⏳ Waiting for Karpenter to be ready...${NC}"
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=karpenter -n ${KARPENTER_NAMESPACE} --timeout=300s
+  --set "replicas=1" \
+  --values karpenter-values.yaml
 
 # Verify installation
 echo -e "${BLUE}✅ Verifying Karpenter installation...${NC}"

@@ -52,10 +52,10 @@ helm list -n ${KARPENTER_NAMESPACE} || true
 kubectl get namespace ${KARPENTER_NAMESPACE} 2>/dev/null || echo -e "${GREEN}  Namespace deleted successfully${NC}"
 
 echo ""
-echo -e "${GREEN}🎉 Karpenter uninstalled successfully!${NC}"
-echo ""
+echo -e "${GREEN}🎉 Karpenter uninstalled successfully!${NC}"echo ""
 echo -e "${YELLOW}📝 Next steps:${NC}"
 echo -e "  1. To remove NodePools/EC2NodeClasses: cd ../3-karpenter && terraform destroy"
 echo -e "  2. To remove all infrastructure: cd ../1-infra && terraform destroy"
 echo -e "  3. Or run the complete destroy script: cd .. && ./destroy.sh"
 echo ""
+
