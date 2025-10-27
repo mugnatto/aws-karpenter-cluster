@@ -20,6 +20,11 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
+variable "private_subnet_ids" {
+  description = "List of private subnet IDs for Fargate profiles"
+  type        = list(string)
+}
+
 variable "public_access_cidrs" {
   description = "List of CIDR blocks that can access the EKS API server"
   type        = list(string)
@@ -31,6 +36,8 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+# Karpenter creates nodes directly - no temporary node group needed
 
 variable "tags" {
   description = "Tags to apply to all resources"

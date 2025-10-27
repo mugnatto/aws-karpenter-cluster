@@ -1,0 +1,106 @@
+# ============================================================================
+# AWS EKS Karpenter Cluster - Terraform Variables Example
+# ============================================================================
+# 
+# INSTRUCTIONS:
+# 1. Copy this file: cp terraform.tfvars.example terraform.tfvars
+# 2. Update the values below according to your environment
+# 3. Run ./deploy.sh to deploy the cluster
+#
+# NOTE: This is a CENTRAL tfvars file. The deploy.sh script will use it
+#       with -var-file flag when running terraform in subdirectories.
+#
+# BACKEND: The backend S3 configuration is in the backend.tf files.
+#          Make sure to update those if using a different S3 bucket.
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Configuration
+# -----------------------------------------------------------------------------
+
+# AWS region where the cluster will be deployed
+aws_region = "us-east-1"
+
+# Environment name (dev, staging, production, etc.)
+environment = "development"
+
+# Project name - used as prefix for all resources
+project_name = "karpenter-cluster"
+
+# -----------------------------------------------------------------------------
+# VPC Configuration
+# -----------------------------------------------------------------------------
+
+# CIDR block for the VPC
+vpc_cidr = "10.0.0.0/16"
+
+# Number of availability zones (recommended: 2 or 3)
+az_count = 2
+
+# -----------------------------------------------------------------------------
+# EKS Cluster Configuration
+# -----------------------------------------------------------------------------
+
+# Kubernetes version for the EKS cluster
+kubernetes_version = "1.34"
+
+# List of CIDR blocks that can access the EKS API server
+# Default: ["0.0.0.0/0"] - allows access from anywhere (NOT RECOMMENDED for production)
+# Example for restricted access: ["203.0.113.0/24", "198.51.100.0/24"]
+public_access_cidrs = ["0.0.0.0/0"]
+
+# Number of days to retain CloudWatch logs
+log_retention_days = 7
+
+# -----------------------------------------------------------------------------
+# Karpenter Configuration
+# -----------------------------------------------------------------------------
+
+# Version of Karpenter to install
+# Check latest version at: https://github.com/aws/karpenter/releases
+karpenter_version = "1.8.1"
+
+# Namespace where Karpenter will be installed
+karpenter_namespace = "karpenter"
+
+# Name of the SQS queue for spot instance interruption handling
+# Leave empty to auto-generate
+interruption_queue_name = ""
+
+# -----------------------------------------------------------------------------
+# Backend Configuration (S3)
+# -----------------------------------------------------------------------------
+# The S3 backend is configured in:
+#   - 1-task/1-infra/backend.tf
+#   - 1-task/3-karpenter/backend.tf
+#
+# IMPORTANT: Update these files with your S3 bucket details:
+#   - bucket: Your S3 bucket name for Terraform state
+#   - region: AWS region where the S3 bucket is located
+#   - key: Path within the bucket (keep as is for stage separation)
+#
+# Example backend configuration:
+#   bucket = "my-company-terraform-state"
+#   key    = "aws-karpenter-cluster/1-infra/terraform.tfstate"
+#   region = "us-east-1"
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Production Configuration Example
+# -----------------------------------------------------------------------------
+# For production environments, consider:
+# 
+# environment         = "production"
+# vpc_cidr            = "10.1.0.0/16"
+# az_count            = 3
+# kubernetes_version  = "1.34"  # Use a stable, well-tested version
+# public_access_cidrs = ["YOUR_OFFICE_IP/32", "YOUR_VPN_IP/32"]
+# log_retention_days  = 30
+# 
+# Also remember to:
+# - Enable deletion protection on S3 bucket
+# - Enable versioning on S3 bucket
+# - Use DynamoDB for state locking if multiple devs are working on the same project
+# - Restrict IAM permissions
+# -----------------------------------------------------------------------------
+

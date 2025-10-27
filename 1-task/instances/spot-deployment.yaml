@@ -1,0 +1,52 @@
+# Kubernetes deployment for spot instances
+# This file contains deployment configurations optimized for spot instances
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spot-workload
+  labels:
+    app: spot-workload
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: spot-workload
+  template:
+    metadata:
+      labels:
+        app: spot-workload
+    spec:
+      nodeSelector:
+        karpenter.sh/capacity-type: spot
+        kubernetes.io/arch: amd64
+        node-type: default
+      containers:
+      - name: nginx
+        image: nginx:1.21
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      # Tolerations for spot instance interruptions
+      tolerations:
+      - key: "karpenter.sh/disruption"
+        operator: "Exists"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spot-workload-service
+spec:
+  selector:
+    app: spot-workload
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
