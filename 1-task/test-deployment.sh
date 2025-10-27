@@ -3,6 +3,7 @@
 # Test script to validate Karpenter deployment
 # This script verifies that both AMD64 and ARM64 (Graviton) workloads are running correctly
 
+
 set -e
 
 # Colors

@@ -3,7 +3,8 @@
 # Complete destroy script for AWS EKS Karpenter Cluster
 # This script removes all resources in the correct order to avoid dependency issues
 
-# Don't exit on error - we want to continue even if some resources are already deleted
+# Don't exit on error - we want to continue even if some resources are already deleted 
+
 set +e
 
 # Colors for output

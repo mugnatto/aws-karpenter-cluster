@@ -17,6 +17,7 @@ echo -e "${BLUE}║   AWS EKS Karpenter Cluster - Complete Deployment          �
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
+
 # Check prerequisites
 echo -e "${YELLOW}📋 Checking prerequisites...${NC}"
 command -v terraform >/dev/null 2>&1 || { echo -e "${RED}❌ Terraform is required but not installed.${NC}" >&2; exit 1; }
