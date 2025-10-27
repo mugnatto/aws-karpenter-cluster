@@ -46,10 +46,13 @@ module "vpc" {
 module "eks" {
   source = "../../terraform/modules/eks"
   
-  cluster_name = "${var.project_name}-${var.environment}"
-  subnet_ids = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
-  private_subnet_ids = module.vpc.private_subnet_ids
-  vpc_id = module.vpc.vpc_id
+  cluster_name        = "${var.project_name}-${var.environment}"
+  kubernetes_version  = var.kubernetes_version
+  subnet_ids          = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
+  private_subnet_ids  = module.vpc.private_subnet_ids
+  vpc_id              = module.vpc.vpc_id
+  public_access_cidrs = var.public_access_cidrs
+  log_retention_days  = var.log_retention_days
   tags = {
     Environment = var.environment
     Project     = var.project_name
