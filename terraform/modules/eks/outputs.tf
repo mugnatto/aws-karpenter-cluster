@@ -30,9 +30,14 @@ output "cluster_iam_role_arn" {
   value       = aws_iam_role.cluster.arn
 }
 
-output "node_group_iam_role_arn" {
-  description = "IAM role ARN associated with EKS node group"
-  value       = aws_iam_role.node_group.arn
+output "karpenter_node_iam_role_arn" {
+  description = "IAM role ARN for Karpenter-managed nodes"
+  value       = aws_iam_role.karpenter_node.arn
+}
+
+output "karpenter_node_iam_role_name" {
+  description = "IAM role name for Karpenter-managed nodes"
+  value       = aws_iam_role.karpenter_node.name
 }
 
 output "oidc_provider_arn" {
@@ -43,4 +48,19 @@ output "oidc_provider_arn" {
 output "oidc_provider_url" {
   description = "URL of the OIDC provider"
   value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+output "cluster_creator_arn" {
+  description = "ARN of the IAM principal that created the cluster"
+  value       = data.aws_caller_identity.current.arn
+}
+
+output "cluster_security_group_id" {
+  description = "Security group ID attached to the EKS cluster"
+  value       = aws_security_group.cluster.id
+}
+
+output "karpenter_nodes_security_group_id" {
+  description = "Security group ID for Karpenter-managed nodes"
+  value       = aws_security_group.karpenter_nodes.id
 }
