@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   AWS EKS Karpenter Cluster - Complete Deployment         ║${NC}"
+echo -e "${BLUE}║   AWS EKS Karpenter Cluster - Complete Deployment          ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -29,6 +29,17 @@ echo -e "${GREEN}✅ All prerequisites satisfied${NC}\n"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  STAGE 1/3: Deploying Infrastructure (VPC + EKS + IAM)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+
+# Check if central tfvars exists (script is in 1-task/ directory)
+if [ ! -f "terraform.tfvars" ]; then
+    echo -e "${YELLOW}⚠️  terraform.tfvars not found. Using default values from variables.tf${NC}"
+    echo -e "${YELLOW}💡 Copy terraform.tfvars.example to terraform.tfvars and customize it${NC}"
+    TFVARS_FLAG=""
+else
+    echo -e "${YELLOW}📋 Using central terraform.tfvars...${NC}"
+    TFVARS_FLAG="-var-file=../terraform.tfvars"
+fi
+
 cd 1-infra
 
 if [ ! -d ".terraform" ]; then
@@ -37,7 +48,7 @@ if [ ! -d ".terraform" ]; then
 fi
 
 echo -e "${YELLOW}🚀 Deploying infrastructure...${NC}"
-terraform apply -auto-approve
+terraform apply $TFVARS_FLAG -auto-approve
 
 echo -e "${GREEN}✅ Stage 1 completed!${NC}"
 echo -e "${YELLOW}📊 Infrastructure outputs:${NC}"
@@ -90,6 +101,28 @@ kubectl get nodepools
 kubectl get ec2nodeclasses
 echo ""
 
+# Restart critical pods to ensure proper scheduling
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  Restarting Critical Pods for Fargate Scheduling${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+
+echo -e "${YELLOW}🔄 Restarting CoreDNS to schedule on Fargate...${NC}"
+kubectl delete pods -n kube-system -l k8s-app=kube-dns --ignore-not-found=true
+
+echo -e "${YELLOW}⏳ Waiting for CoreDNS to become ready...${NC}"
+kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=120s
+
+echo -e "${GREEN}✅ CoreDNS is running on Fargate!${NC}"
+kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+echo ""
+
+echo -e "${YELLOW}⏳ Waiting for Karpenter to become ready...${NC}"
+kubectl wait --for=condition=ready pod -n karpenter -l app.kubernetes.io/name=karpenter --timeout=120s
+
+echo -e "${GREEN}✅ Karpenter is healthy!${NC}"
+kubectl get pods -n karpenter -o wide
+echo ""
+
 # Deploy test workloads
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Deploying Test Workloads${NC}"
@@ -129,7 +162,7 @@ echo -e "  ARM64_POD=\$(kubectl get pods -l app=graviton-workload -o jsonpath='{
 echo -e "  kubectl exec \$ARM64_POD -- uname -m  # Should output: aarch64"
 echo ""
 echo -e "  ${BLUE}# Run automated tests${NC}"
-echo -e "  ./test-deployment.sh"
+echo -e "  ./test-deployment.sh  -  Note: It might take up to 5 minutes to complete"
 echo ""
 echo -e "${YELLOW}📝 To clean up:${NC}"
 echo -e "  ./destroy.sh"

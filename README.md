@@ -30,11 +30,42 @@ This repository provides Infrastructure as Code to deploy a fully automated Kube
 
 ### Prerequisites
 
-- AWS CLI configured with appropriate credentials
-- Terraform cli version 1.12.2
-- kubectl version 1.33 
-- Helm version 3.17.2 
-- An S3 bucket for Terraform remote state storage
+#### AWS Account and IAM Requirements
+
+- **AWS Account** with appropriate service limits (EKS, VPC, EC2, IAM)
+- **IAM User or Role** with permissions for:
+  - EKS cluster creation and management
+  - VPC, subnet, and security group creation
+  - IAM role and policy creation
+  - EC2 instance management
+  - S3 bucket access (for Terraform state)
+  - CloudWatch logs management
+- **S3 Bucket** for Terraform remote state storage
+- **AWS CLI** configured with credentials:
+  ```bash
+  aws configure
+  # Or use AWS SSO, environment variables, or instance profiles
+  ```
+
+**Tip**: For production, use IAM roles with least-privilege policies.
+
+#### Required Tools
+
+Install the following CLI tools (links to official documentation):
+
+- **AWS CLI** (>= 2.0) - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- **Terraform** (>= 1.0) - [Installation Guide](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
+- **kubectl** (>= 1.28) - [Installation Guide](https://kubernetes.io/docs/tasks/tools/)
+- **Helm** (>= 3.10) - [Installation Guide](https://helm.sh/docs/intro/install/)
+- **jq** (optional, for JSON parsing) - [Installation Guide](https://jqlang.github.io/jq/download/)
+
+**Verification**:
+```bash
+aws --version        # aws-cli/2.x.x
+terraform --version  # Terraform v1.x.x
+kubectl version      # Client Version: v1.x.x
+helm version         # version.BuildInfo{Version:"v3.x.x"}
+```
 
 ### Configuration
 
@@ -259,6 +290,7 @@ kubectl describe nodeclaim <nodeclaim-name>
 ```
 
 Check EKS Access Entries:
+# aws eks list-access-entries --cluster-name karpenter-cluster-development --region us-east-1
 ```bash
 aws eks list-access-entries --cluster-name YOUR_CLUSTER_NAME --region YOUR_REGION
 ```

@@ -22,6 +22,15 @@ echo -e "${YELLOW}⚠️  WARNING: This will destroy all infrastructure!${NC}"
 echo -e "${YELLOW}Press CTRL+C to cancel, or wait 10 seconds to continue...${NC}"
 sleep 10
 
+# Check if central tfvars exists (script is in 1-task/ directory)
+if [ -f "terraform.tfvars" ]; then
+    echo -e "${YELLOW}📋 Using central terraform.tfvars for destroy operations...${NC}"
+    TFVARS_FLAG="-var-file=../terraform.tfvars"
+else
+    echo -e "${YELLOW}⚠️  terraform.tfvars not found. Using default values.${NC}"
+    TFVARS_FLAG=""
+fi
+
 # Configure kubectl
 cd 1-infra
 CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "karpenter-cluster-development")
@@ -57,6 +66,9 @@ else
 fi
 
 echo -e "${GREEN}✅ Workloads cleanup complete!${NC}\n"
+
+echo -e "${YELLOW}⏳ Waiting 2 minutes before next step...${NC}"
+sleep 120
 
 # Step 2: Delete NodeClaims
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -97,6 +109,9 @@ fi
 
 echo -e "${GREEN}✅ NodeClaims cleanup complete!${NC}\n"
 
+echo -e "${YELLOW}⏳ Waiting 2 minutes before next step...${NC}"
+sleep 120
+
 # Step 3: Destroy Karpenter Resources
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  STEP 3/6: Destroying Karpenter Resources (NodePools/EC2NodeClasses)${NC}"
@@ -111,6 +126,9 @@ else
 fi
 
 echo -e "${GREEN}✅ Karpenter resources cleanup complete!${NC}\n"
+
+echo -e "${YELLOW}⏳ Waiting 2 minutes before next step...${NC}"
+sleep 120
 
 # Step 4: Uninstall Karpenter Helm Release
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -129,29 +147,114 @@ fi
 
 echo -e "${GREEN}✅ Karpenter uninstall complete!${NC}\n"
 
-# Step 5: Verify ENIs are cleaned up
+echo -e "${YELLOW}⏳ Waiting 2 minutes before next step...${NC}"
+sleep 120
+
+# Step 5: Force cleanup of ENIs and EIPs
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  STEP 5/6: Verifying Network Interfaces Cleanup${NC}"
+echo -e "${BLUE}  STEP 5/6: Force Cleanup of Network Interfaces and Elastic IPs${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 
-echo -e "${YELLOW}🔍 Checking for remaining ENIs in cluster subnets...${NC}"
 cd ../1-infra
 
 # Get VPC ID from terraform state
 VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || echo "")
 
 if [ -n "$VPC_ID" ]; then
+    echo -e "${YELLOW}🔍 Checking for remaining ENIs in VPC $VPC_ID...${NC}"
+    
+    # Get all ENIs in the VPC (excluding EKS control plane ENIs)
+    ENI_IDS=$(aws ec2 describe-network-interfaces --region ${AWS_REGION} \
+        --filters "Name=vpc-id,Values=$VPC_ID" \
+        --query 'NetworkInterfaces[?!contains(Description, `EKS cluster control plane`) && !contains(Description, `arn:aws:eks`)].NetworkInterfaceId' \
+        --output text 2>/dev/null)
+    
+    if [ -n "$ENI_IDS" ]; then
+        echo -e "${YELLOW}🗑️  Found ENIs to clean up, attempting to detach and delete...${NC}"
+        
+        for ENI_ID in $ENI_IDS; do
+            echo -e "${YELLOW}  Processing ENI: $ENI_ID${NC}"
+            
+            # Get attachment ID if attached
+            ATTACHMENT_ID=$(aws ec2 describe-network-interfaces --region ${AWS_REGION} \
+                --network-interface-ids $ENI_ID \
+                --query 'NetworkInterfaces[0].Attachment.AttachmentId' \
+                --output text 2>/dev/null)
+            
+            # Detach if attached
+            if [ "$ATTACHMENT_ID" != "None" ] && [ -n "$ATTACHMENT_ID" ]; then
+                echo -e "${YELLOW}    Detaching ENI...${NC}"
+                aws ec2 detach-network-interface --region ${AWS_REGION} \
+                    --attachment-id $ATTACHMENT_ID --force 2>/dev/null || true
+                sleep 10
+            fi
+            
+            # Try to delete the ENI
+            echo -e "${YELLOW}    Attempting to delete ENI...${NC}"
+            aws ec2 delete-network-interface --region ${AWS_REGION} \
+                --network-interface-id $ENI_ID 2>/dev/null || echo "      Could not delete ENI immediately (may be in use)"
+        done
+        
+        # Wait and retry
+        echo -e "${YELLOW}⏳ Waiting 60s for ENIs to be fully detached...${NC}"
+        sleep 60
+        
+        # Retry deletion
+        for ENI_ID in $ENI_IDS; do
+            aws ec2 delete-network-interface --region ${AWS_REGION} \
+                --network-interface-id $ENI_ID 2>/dev/null && echo -e "${GREEN}  ✅ Deleted ENI: $ENI_ID${NC}" || true
+        done
+    else
+        echo -e "${GREEN}✅ No ENIs found to clean up!${NC}"
+    fi
+    
+    # Check for Elastic IPs
+    echo -e "\n${YELLOW}🔍 Checking for Elastic IPs in VPC...${NC}"
+    EIP_ALLOCATION_IDS=$(aws ec2 describe-addresses --region ${AWS_REGION} \
+        --filters "Name=domain,Values=vpc" \
+        --query "Addresses[?NetworkInterfaceId && contains(to_string(Tags[?Key=='kubernetes.io/cluster/${CLUSTER_NAME}' || Key=='karpenter.sh/discovery']), '${CLUSTER_NAME}')].AllocationId" \
+        --output text 2>/dev/null)
+    
+    if [ -n "$EIP_ALLOCATION_IDS" ]; then
+        echo -e "${YELLOW}🗑️  Found Elastic IPs to release...${NC}"
+        
+        for ALLOC_ID in $EIP_ALLOCATION_IDS; do
+            echo -e "${YELLOW}  Disassociating and releasing EIP: $ALLOC_ID${NC}"
+            
+            # Get association ID
+            ASSOC_ID=$(aws ec2 describe-addresses --region ${AWS_REGION} \
+                --allocation-ids $ALLOC_ID \
+                --query 'Addresses[0].AssociationId' \
+                --output text 2>/dev/null)
+            
+            # Disassociate if associated
+            if [ "$ASSOC_ID" != "None" ] && [ -n "$ASSOC_ID" ]; then
+                aws ec2 disassociate-address --region ${AWS_REGION} \
+                    --association-id $ASSOC_ID 2>/dev/null || true
+                sleep 5
+            fi
+            
+            # Release the EIP
+            aws ec2 release-address --region ${AWS_REGION} \
+                --allocation-id $ALLOC_ID 2>/dev/null && echo -e "${GREEN}  ✅ Released EIP: $ALLOC_ID${NC}" || echo -e "${YELLOW}  ⚠️  Could not release EIP: $ALLOC_ID${NC}"
+        done
+    else
+        echo -e "${GREEN}✅ No Elastic IPs found to release!${NC}"
+    fi
+    
+    # Final verification
+    echo -e "\n${YELLOW}🔍 Final verification of network resources...${NC}"
     RETRY_COUNT=0
     MAX_RETRIES=6
     
     while [ "$RETRY_COUNT" -lt "$MAX_RETRIES" ]; do
-        # Check for ENIs in the VPC that are not attached to the cluster control plane
         ENI_COUNT=$(aws ec2 describe-network-interfaces --region ${AWS_REGION} \
-            --filters "Name=vpc-id,Values=$VPC_ID" "Name=description,Values=*karpenter*" \
-            --query 'NetworkInterfaces[?Status!=`available`]' --output text 2>/dev/null | wc -l)
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+            --query 'NetworkInterfaces[?!contains(Description, `EKS cluster control plane`) && !contains(Description, `arn:aws:eks`)]' \
+            --output text 2>/dev/null | wc -l)
         
         if [ "$ENI_COUNT" -eq 0 ]; then
-            echo -e "${GREEN}✅ All Karpenter ENIs have been cleaned up!${NC}"
+            echo -e "${GREEN}✅ All ENIs have been cleaned up!${NC}"
             break
         fi
         
@@ -159,12 +262,16 @@ if [ -n "$VPC_ID" ]; then
         sleep 30
         RETRY_COUNT=$((RETRY_COUNT+1))
     done
+    
 else
-    echo -e "${YELLOW}⚠️  Could not determine VPC ID, skipping ENI check${NC}"
+    echo -e "${YELLOW}⚠️  Could not determine VPC ID, skipping network cleanup${NC}"
     sleep 30
 fi
 
-echo -e "${GREEN}✅ Network cleanup verified!${NC}\n"
+echo -e "${GREEN}✅ Network resources cleanup complete!${NC}\n"
+
+echo -e "${YELLOW}⏳ Waiting 2 minutes before final infrastructure destroy...${NC}"
+sleep 120
 
 # Step 6: Destroy Infrastructure
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -173,7 +280,7 @@ echo -e "${BLUE}═════════════════════�
 
 if [ -f "terraform.tfstate" ] || [ -f ".terraform/terraform.tfstate" ]; then
     echo -e "${YELLOW}🗑️  Destroying infrastructure...${NC}"
-    terraform destroy -auto-approve
+    terraform destroy $TFVARS_FLAG -auto-approve
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Infrastructure destroyed successfully!${NC}\n"
@@ -183,7 +290,7 @@ if [ -f "terraform.tfstate" ] || [ -f ".terraform/terraform.tfstate" ]; then
         echo -e "  - ENIs still attached to subnets (wait a few minutes and try again)"
         echo -e "  - Security groups with dependencies (check EC2 console)"
         echo -e "  - LoadBalancers created by services (delete manually if needed)"
-        echo -e "\n${YELLOW}To retry: cd 1-infra && terraform destroy${NC}\n"
+        echo -e "\n${YELLOW}To retry: cd 1-infra && terraform destroy $TFVARS_FLAG${NC}\n"
     fi
 else
     echo -e "${YELLOW}⚠️  No Terraform state found, infrastructure may already be destroyed${NC}"
