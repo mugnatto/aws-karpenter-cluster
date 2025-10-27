@@ -10,6 +10,10 @@ resource "aws_vpc" "main" {
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-vpc"
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
@@ -31,7 +35,6 @@ resource "aws_subnet" "public" {
     Name = "${var.name_prefix}-public-subnet-${count.index + 1}"
     Type = "Public"
     "kubernetes.io/role/elb" = "1"
-    "karpenter.sh/discovery" = var.name_prefix
   })
 }
 
@@ -69,6 +72,10 @@ resource "aws_nat_gateway" "main" {
   })
 
   depends_on = [aws_internet_gateway.main]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_route_table" "public" {

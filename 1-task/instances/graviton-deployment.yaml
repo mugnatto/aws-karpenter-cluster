@@ -1,0 +1,51 @@
+# Kubernetes deployment for Graviton instances
+# This file contains deployment configurations optimized for Graviton processors
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graviton-workload
+  labels:
+    app: graviton-workload
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: graviton-workload
+  template:
+    metadata:
+      labels:
+        app: graviton-workload
+    spec:
+      # Node selector for Graviton instances
+      nodeSelector:
+        node-type: graviton
+      containers:
+      - name: nginx
+        image: nginx:1.21
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      # Tolerations for spot instance interruptions
+      tolerations:
+      - key: "karpenter.sh/disruption"
+        operator: "Exists"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graviton-workload-service
+spec:
+  selector:
+    app: graviton-workload
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
