@@ -47,7 +47,7 @@ terraform {
   backend "s3" {
     bucket = "your-unique-bucket-name"  # Update this
     key    = "aws-karpenter-cluster/1-infra/terraform.tfstate"
-    region = "us-east-1"
+    region = "YOUR_REGION"
   }
 }
 ```
@@ -260,17 +260,17 @@ kubectl describe nodeclaim <nodeclaim-name>
 
 Check EKS Access Entries:
 ```bash
-aws eks list-access-entries --cluster-name karpenter-cluster-development --region us-east-1
+aws eks list-access-entries --cluster-name YOUR_CLUSTER_NAME --region YOUR_REGION
 ```
 
 Verify subnet tags:
 ```bash
-aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=karpenter-cluster-development"
+aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=YOUR_CLUSTER_NAME"
 ```
 
 Check security group tags:
 ```bash
-aws ec2 describe-security-groups --filters "Name=tag:karpenter.sh/discovery,Values=karpenter-cluster-development"
+aws ec2 describe-security-groups --filters "Name=tag:karpenter.sh/discovery,Values=YOUR_CLUSTER_NAME"
 ```
 
 ### Karpenter Not Provisioning Nodes
@@ -319,7 +319,7 @@ sleep 60
 
 # 3. Destroy Karpenter resources
 cd 1-task/3-karpenter
-terraform destroy -auto-approve
+terraform destroy 
 
 # 4. Uninstall Karpenter Helm release
 cd ../2-helm
@@ -327,7 +327,7 @@ cd ../2-helm
 
 # 5. Destroy infrastructure
 cd ../1-infra
-terraform destroy -auto-approve
+terraform destroy 
 ```
 
 ## Project Structure
@@ -479,6 +479,8 @@ kubectl top pods
 
 ## Known Issues and Solutions
 
+This medium also helped a lot with the troubleshooting and debug: https://medium.com/@ShubhamTheDevOps/real-world-karpenter-implementation-complete-guide-troubleshooting-scenerio-d412958a088f
+
 ### Issue: AL2023 UserData Not Executing
 
 **Symptom**: Nodes created but not joining cluster when using AL2023
@@ -514,9 +516,9 @@ kubectl top pods
 **Solution**: Ensure Access Entry exists with type `EC2_LINUX`:
 ```bash
 aws eks describe-access-entry \
-  --cluster-name karpenter-cluster-development \
-  --principal-arn arn:aws:iam::ACCOUNT:role/karpenter-cluster-development-karpenter-node-role \
-  --region us-east-1
+  --cluster-name YOUR_CLUSTER_NAME \
+  --principal-arn arn:aws:iam::ACCOUNT:role/YOUR_CLUSTER_NAME-karpenter-node-role \
+  --region YOUR_REGION
 ```
 
 The Access Entry should have `type: EC2_LINUX` which automatically grants `system:nodes` and `system:bootstrappers` groups.
@@ -535,15 +537,11 @@ The Access Entry should have `type: EC2_LINUX` which automatically grants `syste
 - Do not tag public subnets
 - Verify tags:
 ```bash
-aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=karpenter-cluster-development"
+aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=YOUR_CLUSTER_NAME"
 ```
 
 **References**:
 - [Karpenter Subnet Discovery](https://karpenter.sh/docs/concepts/nodeclasses/#subnet-discovery)
-
-## Additional Resources
-
-For detailed technical information, architecture diagrams, and advanced troubleshooting, see [TECHNICAL.md](TECHNICAL.md).
 
 ## License
 
