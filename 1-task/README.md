@@ -1,37 +1,19 @@
-# AWS Cloud Infrastructure - Kubernetes & Architecture Design
+# AWS EKS Karpenter Cluster
 
-This repository contains two distinct technical tasks related to Kubernetes infrastructure on AWS. Each task demonstrates different aspects of cloud architecture and DevOps practices.
+Production-ready EKS cluster deployment featuring Karpenter autoscaling with support for both AMD64 and ARM64 (Graviton) instances, optimized for cost-efficiency using Spot instances.
 
-## Repository Structure
+## Overview
 
-```
-aws-karpenter-cluster/
-├── 1-task/          # Task 1: EKS + Karpenter Infrastructure
-├── 2-task/          # Task 2: Architecture Design Document
-└── terraform/       # Reusable Terraform modules
-```
-
----
-
-## Task 1: EKS Cluster with Karpenter and Multi-Architecture Support
-
-**Objective**: Build initial Kubernetes infrastructure for a growing startup, leveraging advanced autoscaling with Karpenter and support for both x86 (AMD64) and ARM64 (Graviton) instances.
-
-### Task 1 Scope
-
-Infrastructure as Code (Terraform) implementation that provisions:
-- EKS Cluster (latest available version) in dedicated VPC
-- Karpenter configured with NodePools for x86 and ARM64 architectures
-- Documentation for developers to use the infrastructure
+This repository provides Infrastructure as Code to deploy a fully automated Kubernetes cluster on AWS EKS. The cluster leverages Karpenter for intelligent autoscaling and supports multi-architecture workloads across AMD64 and ARM64 (Graviton) processors.
 
 ### Key Features
 
-- **Intelligent autoscaling** with Karpenter
-- **Multi-architecture**: AMD64 and ARM64 (Graviton) support
-- **Cost optimization** with Spot instances
-- **Bottlerocket OS** for enhanced security and performance
-- **Fargate** for system components (Karpenter, CoreDNS)
-- **Modern EKS Access Entries API** for authentication
+- Dynamic node provisioning with Karpenter
+- Multi-architecture support (AMD64 and ARM64 Graviton)
+- Cost optimization through Spot instances
+- Bottlerocket OS for enhanced security and performance
+- Fargate-hosted system components (Karpenter, CoreDNS)
+- Modern EKS authentication using Access Entries API
 
 ### Technology Stack
 
@@ -39,61 +21,12 @@ Infrastructure as Code (Terraform) implementation that provisions:
 |-----------|---------|---------|
 | **Amazon EKS** | 1.34 | Kubernetes control plane |
 | **Karpenter** | 1.8.1 | Kubernetes autoscaler |
-| **Bottlerocket OS** | 1.49.0 | Container-optimized OS |
+| **Bottlerocket OS** | 1.49.0 | Container-optimized Linux distribution |
 | **Terraform** | >= 1.0 | Infrastructure as Code |
 | **AWS Provider** | 6.18.0 | Terraform AWS provider |
 | **Kubernetes Provider** | 2.38.0 | Terraform Kubernetes provider |
 
-### Location
-
-Complete implementation is in the **`1-task/`** directory with specific README containing deployment instructions.
-
----
-
-## Task 2: Cloud Architecture Design Document for Startup
-
-**Objective**: Create comprehensive architectural design document for startup "Innovate Inc." requiring web application deployment on AWS following best practices for security, scalability, and cost optimization.
-
-### Task 2 Scope
-
-Cloud architecture design covering:
-- **AWS Account Structure**: Multi-account strategy with AWS Organizations
-- **Network Design**: VPC, subnets, security groups, VPC Endpoints
-- **Compute Platform**: EKS with Fargate
-- **Database**: RDS PostgreSQL Multi-AZ
-- **CI/CD**: GitHub Actions with OIDC
-- **Security**: WAF, Secrets Manager, encryption, compliance (OWASP Top 10)
-- **Monitoring & Costs**: CloudWatch, Cost Explorer
-
-### Target Application
-
-- **Backend**: Python/Flask (REST API)
-- **Frontend**: React (SPA)
-- **Database**: PostgreSQL
-- **Initial Traffic**: Few hundred users per day
-- **Expected Growth**: Potentially millions of users
-- **Data**: Sensitive user information
-- **Deployment**: Continuous CI/CD
-
-### Architecture Characteristics
-
-- **Security-first**: Zero public exposure, CloudFront + WAF, VPC Endpoints
-- **Cost-optimized**: ~$439/month for complete multi-account setup
-- **High availability**: Multi-AZ deployment, RDS failover < 60s
-- **Scalable**: Supports 1000x growth without architectural rewrites
-- **Compliance-ready**: SOC 2, GDPR, HIPAA
-
-### Location
-
-Complete architecture document in **`2-task/README.md`** with high-level diagrams.
-
----
-
-# Detailed Guide: Task 1 - EKS + Karpenter
-
-The sections below provide complete deployment instructions for Task 1. For Task 2, see the `2-task/README.md` file.
-
-## Quick Start (Task 1)
+## Quick Start
 
 ### Prerequisites
 
@@ -674,35 +607,10 @@ aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=YOUR_
 **References**:
 - [Karpenter Subnet Discovery](https://karpenter.sh/docs/concepts/nodeclasses/#subnet-discovery)
 
----
-
-## Next Steps
-
-### Task 1 Implementation
-You just reviewed the technical details of Task 1: EKS infrastructure with Karpenter.
-
-- **Deployment**: Follow instructions in `1-task/README.md`
-- **Terraform Code**: Available in `1-task/1-infra/`, `1-task/3-karpenter/`
-- **Reusable Modules**: Located in `terraform/modules/`
-
-### Task 2: Architecture Design
-
-To review the complete cloud architecture document (Task 2), see:
-
-📄 **[2-task/README.md](2-task/README.md)**
-
-The document contains:
-- Multi-account AWS architecture
-- Network design with VPC Endpoints
-- OWASP Top 10 security strategy
-- CI/CD with GitHub Actions
-- Detailed cost analysis
-- Scalability roadmap (0-1M+ users)
-
----
-
 ## License
 
-This project is provided for educational and demonstration purposes.
+This project is provided as-is for educational and demonstration purposes.
+
+---
 
 **Last Updated**: October 2025
