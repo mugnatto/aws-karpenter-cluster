@@ -1,8 +1,32 @@
+# Terraform
 .terraform/
 .terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.backup
 terraform.tfvars
 terraform.tfvars.backup
+*.tfplan
+
+# IDE and Editor
 .cursor/
-.cursor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# AWS
+.aws-sam/
