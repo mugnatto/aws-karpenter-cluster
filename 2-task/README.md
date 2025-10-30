@@ -2,31 +2,30 @@
 
 ## Overview
 
-Production-ready AWS architecture for a web application: Python/Flask backend, React frontend, PostgreSQL database. Emphasis on security, cost optimization, and operational simplicity using managed services.
+Production-ready AWS architecture for a SPA web application: Python/Flask backend, React frontend, PostgreSQL database. This architecture was designed for teams with limited cloud experience. This covers security, cost optimization, and operational simplicity using managed services.
 
-Built for startups and small teams requiring robust security and scalability at reasonable cost.
+--- 
 
 ## Design Principles
 
 **Security**
-Application infrastructure in private subnets. CloudFront and WAF for edge protection. VPC Endpoints for AWS service access.
+Application infrastructure in private subnets. CloudFront and WAF for edge protection. VPC Endpoints for AWS internal service access.
 
 **Cost**
-Cost-optimized through VPC Endpoints, 2-AZ production, single-AZ development, Fargate pay-per-use.
+Cost-optimized through VPC Endpoints, 2-AZ production, single-AZ development, EKS Fargate .
 
 **Operations**
 Managed services (EKS, RDS, CloudFront). Fargate eliminates node management. Automated failover and scaling.
 
 **Scalability**
-Supports growth from hundreds to millions of users. Clear migration paths: RDS to Aurora, single to multi-region, monolith to microservices.
-
+Supports growth from hundreds to millions of users.
 ---
 
 ## High-Level Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    INNOVATE INC. CLOUD ARCHITECTURE                            │
+│                                    INNOVATE INC. CLOUD ARCHITECTURE                             │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -50,106 +49,105 @@ Supports growth from hundreds to millions of users. Clear migration paths: RDS t
 │       │                                                                                         │
 │       ▼                                                                                         │
 │  ┌─────────────────┐                                                                            │
-│  │   Route 53      │  DNS: innovate.com → CloudFront distribution                              │
+│  │   Route 53      │  DNS: innovate.com → CloudFront distribution                               │
 │  └────────┬────────┘                                                                            │
 │           │                                                                                     │
 │           ▼                                                                                     │
 │  ┌──────────────────────────────────┐                                                           │
-│  │    CloudFront (Global CDN)      │  • Edge caching (200+ locations)                          │
-│  │                                 │  • TLS/SSL termination                                    │
-│  │ Origin: Internal ALB            │  • Compression (gzip, brotli)                             │
-│  └────────┬─────────────────────────┘  • Custom headers validation                             │
+│  │    CloudFront (Global CDN)       │  • Edge caching (200+ locations)                          │
+│  │                                  │  • TLS/SSL termination                                    │
+│  │ Origin: Internal ALB             │  • Compression                                            │
+│  └────────┬─────────────────────────┘  • Custom headers validation                              │
 │           │                                                                                     │
 │           ▼                                                                                     │
 │  ┌──────────────────────────────────┐                                                           │
-│  │      AWS WAF (CloudFront)       │  • OWASP Top 10 protection                                │
-│  │                                 │  • SQL injection blocking                                │
-│  │  • Managed Rules (AWS)          │  • XSS protection                                         │
-│  │  • Rate Limiting (2000 req/5m)  │  • Bot detection                                          │
-│  └────────┬─────────────────────────┘  • DDoS protection (Shield Standard)                     │
+│  │      AWS WAF (CloudFront)        │  • OWASP Top 10 protection                                │
+│  │                                  │  • SQL injection blocking                                 │
+│  │  • Managed Rules (AWS)           │  • XSS protection                                         │
+│  │  • Rate Limiting                 │  • Bot detection                                          │
+│  └────────┬─────────────────────────┘                                                           │
 │           │                                                                                     │
 │           ▼                                                                                     │
-│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                              PRODUCTION VPC (10.0.0.0/16)                             │   │
-│  ├─────────────────────────────────────────────────────────────────────────────────────────┤   │
-│  │           │                                                                             │   │
-│  │           ▼                                                                             │   │
-│  │  ┌──────────────────────────────────┐                                                   │   │
-│  │  │   Internal ALB (Private IPs)    │  • Scheme: internal                               │   │
-│  │  │   10.0.11.x, 10.0.12.x          │  • Cross-zone load balancing                      │   │
-│  │  │                                 │  • Health checks (HTTP /health)                   │   │
-│  │  │  Security: Accept only from     │  • TLS between CloudFront ↔ ALB                   │   │
-│  │  │  CloudFront (custom header)     │                                                   │   │
-│  │  └──────────────────────────────────┘                                                   │   │
-│  │           │                                                                             │   │
-│  │  ┌────────┴────────┐                                                                    │   │
-│  │  │                 │                                                                    │   │
-│  │  AZ-1 (us-east-1a)              AZ-2 (us-east-1b)                                      │   │
-│  │  ┌─────────────────┐              ┌─────────────────┐                                  │   │
-│  │  │ Private App     │              │ Private App     │                                  │   │
-│  │  │ 10.0.11.0/24    │              │ 10.0.12.0/24    │                                  │   │
-│  │  │                 │              │                 │                                  │   │
-│  │  │ • ALB ENI       │              │ • ALB ENI       │                                  │   │
-│  │  │ • Frontend Pods │              │ • Frontend Pods │                                  │   │
-│  │  │   (React/NGINX) │              │   (React/NGINX) │                                  │   │
-│  │  │ • Backend Pods  │              │ • Backend Pods  │                                  │   │
-│  │  │   (Flask/Python)│              │   (Flask/Python)│                                  │   │
-│  │  │ • Managed Nodes │              │                 │                                  │   │
-│  │  │   (Add-ons only)│              │                 │                                  │   │
-│  │  └─────────────────┘              └─────────────────┘                                  │   │
-│  │         │                                  │                                           │   │
-│  │         └──────────────┬───────────────────┘                                           │   │
-│  │                        ▼                                                                │   │
-│  │  ┌─────────────────┐              ┌─────────────────┐                                  │   │
-│  │  │ Private DB      │              │ Private DB      │                                  │   │
-│  │  │ 10.0.21.0/24    │              │ 10.0.22.0/24    │                                  │   │
-│  │  │                 │              │                 │                                  │   │
-│  │  │ • RDS Primary   │◄────────────►│ • RDS Standby   │                                  │   │
-│  │  │   (Multi-AZ)    │ Sync Repl    │   (Failover)    │                                  │   │
-│  │  │ • db.t4g.small  │              │ • Auto-failover │                                  │   │
-│  │  │ • Encrypted     │              │ • < 60s RTO     │                                  │   │
-│  │  └─────────────────┘              └─────────────────┘                                  │   │
-│  │                                                                                         │   │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────┐   │   │
-│  │  │                      VPC ENDPOINTS (AWS PrivateLink)                          │   │   │
-│  │  │  • com.amazonaws.us-east-1.ecr.dkr  (Pull images from Root Account ECR)       │   │   │
-│  │  │  • com.amazonaws.us-east-1.ecr.api  (ECR API calls)                           │   │   │
-│  │  │  • com.amazonaws.us-east-1.s3       (S3 Gateway - FREE, ECR layers)           │   │   │
-│  │  │  • com.amazonaws.us-east-1.secretsmanager  (Secrets injection to pods)        │   │   │
-│  │  │  • com.amazonaws.us-east-1.logs     (CloudWatch Logs)                         │   │   │
-│  │  │                                                                                │   │   │
-│  │  │  ✅ All AWS traffic via PrivateLink backbone                                  │   │   │
-│  │  │  ✅ Cost-effective data transfer                                              │   │   │
-│  │  └─────────────────────────────────────────────────────────────────────────────────┘   │   │
-│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐    │
+│  │                              PRODUCTION VPC (10.0.0.0/16)                               │    │
+│  ├─────────────────────────────────────────────────────────────────────────────────────────┤    │
+│  │           │                                                                             │    │
+│  │           ▼                                                                             │    │
+│  │  ┌──────────────────────────────────┐                                                   │    │
+│  │  │   Internal ALB (Private IPs)    │  • Scheme: internal                                │    │
+│  │  │   10.0.11.x, 10.0.12.x          │  • Cross-zone load balancing                       │    │
+│  │  │                                 │  • Health checks (HTTP /health)                    │    │
+│  │  │  Security: Accept only from     │  • TLS between CloudFront ↔ ALB                    │    │
+│  │  │  CloudFront (custom header)     │                                                    │    │
+│  │  └──────────────────────────────────┘                                                   │    │
+│  │           │                                                                             │    │
+│  │  ┌────────┴────────┐                                                                    │    │
+│  │  │                 │                                                                    │    │
+│  │  AZ-1 (us-east-1a)              AZ-2 (us-east-1b)                                       │    │
+│  │  ┌─────────────────┐              ┌─────────────────┐                                   │    │
+│  │  │ Private App     │              │ Private App     │                                   │    │
+│  │  │ 10.0.11.0/24    │              │ 10.0.12.0/24    │                                   │    │
+│  │  │                 │              │                 │                                   │    │
+│  │  │ • ALB ENI       │              │ • ALB ENI       │                                   │    │
+│  │  │ • Frontend Pods │              │ • Frontend Pods │                                   │    │
+│  │  │   (React/NGINX) │              │   (React/NGINX) │                                   │    │
+│  │  │ • Backend Pods  │              │ • Backend Pods  │                                   │    │
+│  │  │   (Flask/Python)│              │   (Flask/Python)│                                   │    │
+│  │  │ • Managed Nodes │              │                 │                                   │    │
+│  │  │   (Add-ons only)│              │                 │                                   │    │
+│  │  └─────────────────┘              └─────────────────┘                                   │    │
+│  │         │                                  │                                            │    │
+│  │         └──────────────┬───────────────────┘                                            │    │
+│  │                        ▼                                                                │    │
+│  │  ┌─────────────────┐              ┌─────────────────┐                                   │    │
+│  │  │ Private DB      │              │ Private DB      │                                   │    │
+│  │  │ 10.0.21.0/24    │              │ 10.0.22.0/24    │                                   │    │
+│  │  │                 │              │                 │                                   │    │
+│  │  │ • RDS Primary   │◄────────────►│ • RDS Standby   │                                   │    │
+│  │  │   (Multi-AZ)    │ Sync Repl    │   (Failover)    │                                   │    │
+│  │  │ • region bkp rep│              │                 │                                   │    │
+│  │  │ • Encrypted     │              │                 │                                   │    │
+│  │  └─────────────────┘              └─────────────────┘                                   │    │
+│  │                                                                                         │    │
+│  │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │    │
+│  │  │                      VPC ENDPOINTS (AWS PrivateLink)                            │     │   │
+│  │  │  • com.amazonaws.us-east-1.ecr.dkr  (Pull images from Root Account ECR)         │     │   │
+│  │  │  • com.amazonaws.us-east-1.ecr.api  (ECR API calls)                             │     │   │
+│  │  │  • com.amazonaws.us-east-1.s3       (S3 Gateway - FREE, ECR layers)             │     │   │
+│  │  │  • com.amazonaws.us-east-1.secretsmanager  (Secrets injection to pods)          │     │   │
+│  │  │  • com.amazonaws.us-east-1.logs     (CloudWatch Logs)                           │     │   │
+│  │  │                                                                                 │     │   │
+│  │  │  ✅ All AWS traffic via PrivateLink backbone                                    │    │    │
+│  │  │  ✅ Cost-effective data transfer                                                │    │    │
+│  │  └──────────────────────────────────────────────────────────────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                              AMAZON EKS CLUSTER (Production)                                   │
+│                              AMAZON EKS CLUSTER (Production)                                    │
 ├─────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                 │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-│  │  Fargate Pods   │  │  Fargate Pods   │  │  Fargate Pods   │  │  Fargate Pods   │            │
-│  │  Backend (AZ-1) │  │  Backend (AZ-2) │  │  Frontend (AZ-1)│  │  Frontend (AZ-2)│            │
-│  │  Python/Flask   │  │  Python/Flask   │  │  React/NGINX    │  │  React/NGINX    │            │
-│  │  0.5 vCPU, 1 GB │  │  0.5 vCPU, 1 GB │  │  0.25vCPU,0.5GB │  │  0.25vCPU,0.5GB │            │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
+│  │  Fargate Pods   │  │  Fargate Pods   │  │  Fargate Pods   │  │  Fargate Pods   │             │
+│  │  Backend (AZ-1) │  │  Backend (AZ-2) │  │  Frontend (AZ-1)│  │  Frontend (AZ-2)│             │
+│  │  Python/Flask   │  │  Python/Flask   │  │  React/NGINX    │  │  React/NGINX    │             │
+│  │                 │  │                 │  │                 │  │                 │             │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
 │                                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐            │
-│  │         Small Managed Node Group (Add-ons ONLY - Production)                  │            │
-│  │  Instance: t3.small x2 (AZ-1 only for cost savings)                           │            │
-│  │                                                                                │            │
-│  │  Essential Add-ons:                                                            │            │
-│  │  • AWS Load Balancer Controller - Create/manage Internal ALB automatically    │            │
-│  │  • ExternalDNS - Automatic DNS record management in Route 53                  │            │
-│  │  • Metrics Server - Required for HPA (Horizontal Pod Autoscaler)              │            │
-│  │  • Secrets Store CSI Driver - Mount secrets from AWS Secrets Manager          │            │
-│  │  • IRSA (IAM Roles for Service Accounts) - Secure AWS API access without keys │            │
+│  │         Small Managed Node Group (Add-ons ONLY - Production)                  │              │
+│  │  Instance:                                                                    │              │
+│  │  Essential Add-ons:                                                           │              │
+│  │  • AWS Load Balancer Controller - Create/manage Internal ALB automatically    │              │
+│  │  • ExternalDNS - Automatic DNS record management in Route 53                  │              │
+│  │  • Metrics Server - Required for HPA (Horizontal Pod Autoscaler)              │              │
+│  │  • Secrets Store CSI Driver - Mount secrets from AWS Secrets Manager          │              │
+│  │  • IRSA (IAM Roles for Service Accounts) - Secure AWS API access without keys │              │
 │  └─────────────────────────────────────────────────────────────────────────────────┘            │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    CI/CD PIPELINE (Cross-Account)                               │
+│                                    CI/CD PIPELINE                                               │
 ├─────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                 │
 │  ┌─────────────────┐    ┌─────────────────────┐    ┌──────────────┐    ┌──────────────┐         │
@@ -157,35 +155,12 @@ Supports growth from hundreds to millions of users. Clear migration paths: RDS t
 │  │   Actions       │───►│   ECR (Central)     │───►│  EKS Deploy  │───►│  EKS Deploy  │         │
 │  │                 │    │                     │    │              │    │  (Manual)    │         │
 │  │ • OIDC Auth     │    │ • Image Scan (ECR)  │    │ • Auto       │    │ • Approval   │         │
-│  │ • Build & Test  │    │ • Snyk/Trivy        │    │ • Fast iter  │    │ • Blue/Green │         │
+│  │ • Build & Test  │    │ • Snyk/Trivy        │    │ • Fast iter  │    │              │         │
 │  │ • Security Scan │    │ • Lifecycle Policy  │    │              │    │              │         │
 │  └─────────────────┘    └─────────────────────┘    └──────────────┘    └──────────────┘         │
 │                                                                                                 │
 │  Cross-Account ECR Access: Dev and Prod accounts pull images from Root via VPC Endpoints        │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    SECURITY & COMPLIANCE (Startup-Friendly)                    │
-├────────────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                                │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-│  │   AWS WAF       │  │   Secrets Mgr   │  │   IAM/IRSA      │  │   CloudTrail    │            │
-│  │  (CloudFront)   │  │                 │  │                 │  │   (Org-wide)    │            │
-│  │                 │  │ • DB Passwords  │  │ • Least Priv    │  │                 │            │
-│  │ • OWASP Rules   │  │ • API Keys      │  │ • Role-Based    │  │ • Audit Logs    │            │
-│  │ • Rate Limiting │  │ • Auto Rotation │  │ • MFA for Admins│  │ • Compliance    │            │
-│  │ • Bot Protection│  │ • CSI Driver    │  │ • No Access Keys│  │ • S3 Archive    │            │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-│                                                                                                │
-│  ┌─────────────────┐  ┌─────────────────┐                                                      │
-│  │   KMS           │  │   CloudWatch    │                                                      │
-│  │                 │  │                 │                                                      │
-│  │ • Encryption    │  │ • Logs          │                                                      │
-│  │ • RDS at rest   │  │ • Metrics       │                                                      │
-│  │ • EBS volumes   │  │ • Alarms        │                                                      │
-│  │ • Auto rotation │  │ • Dashboards    │                                                      │
-│  └─────────────────┘  └─────────────────┘                                                      │
-└────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -213,7 +188,7 @@ Three-account setup using AWS Organizations:
 
 **Root/Management Account**
 - AWS Organizations and consolidated billing
-- Centralized ECR for all container images
+- Centralized ECR for all container images, Central S3 for Static Images and tfstate files
 - Organization-wide CloudTrail for audit logs
 - Service Control Policies (SCPs)
 - Cross-account IAM roles
@@ -228,8 +203,7 @@ Three-account setup using AWS Organizations:
 **Production Account**
 - Multi-AZ deployment across 2 availability zones
 - Strict security controls and monitoring
-- All changes audited and logged
-- MFA required for admin access
+
 
 ### Why Centralized ECR
 
@@ -253,7 +227,7 @@ Clear separation of Dev vs Prod costs. Easier to optimize and forecast spending.
 Different security controls per environment. Prod can meet SOC 2/HIPAA while Dev remains flexible.
 
 **Access Control**
-Granular IAM policies per account. Junior devs get full Dev access, restricted Prod access.
+Granular IAM policies per account. Devs get full Dev access, restricted Prod access.
 
 ---
 
@@ -261,7 +235,7 @@ Granular IAM policies per account. Junior devs get full Dev access, restricted P
 
 ### VPC Design
 
-Private-only architecture with CloudFront and WAF as the internet-facing layer. All application resources run in private subnets.
+Architecture with CloudFront and WAF as the internet-facing layer. All application resources run in private subnets.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -295,8 +269,8 @@ Private-only architecture with CloudFront and WAF as the internet-facing layer. 
 ### Network Tiers
 
 **Internet-Facing Layer**
-- CloudFront (200+ edge locations)
-- AWS WAF for OWASP Top 10 protection
+- CloudFront 
+- AWS WAF for OWASP protection
 - TLS termination at edge
 - Origin: Internal ALB
 
@@ -306,33 +280,36 @@ Private-only architecture with CloudFront and WAF as the internet-facing layer. 
 - VPC Endpoints for AWS services
 
 **Database Tier**
-- RDS PostgreSQL in dedicated subnets
+- RDS PostgreSQL in separate security groups
 - Application tier access only
 - Multi-AZ (production), Single-AZ (development)
+- Backup replication to other region for disaster recovery
+
 
 ### High Availability
 
 **Production: 2 Availability Zones**
-- All resources deployed across us-east-1a and us-east-1b
+- All resources deployed across different AZs
 - Internal ALB with cross-zone load balancing
-- RDS Multi-AZ with automatic failover (<60s)
+- RDS Multi-AZ with for Zonal Disaster Recovery
 - Fargate pods distributed across both AZs
-- Can survive complete AZ failure
+- Can survive complete AZ failure.
+- Infrastructure deployed via Terraform so it's easier to recreate in other region in case of regional disaster.
+- RDS backup replication to second region to enable disaster recovery.  
 
 **Why 2 AZs Instead of 3**
-- Cost efficiency: 33% savings vs 3-AZ deployment
 - Sufficient redundancy: 99.99% availability
 - AWS best practice minimum for production
-- Easy to add 3rd AZ when traffic justifies cost
+
 
 **Development: Single AZ**
-- Minimal cost deployment in us-east-1a only
+- Minimal cost deployment in 1 AZ only
 - Same architecture pattern as production
 - Can be auto-shutdown during non-business hours
 
 ### VPC Endpoints Strategy
 
-AWS PrivateLink connectivity for AWS services.
+AWS VPC Endpoint connectivity for AWS services without going through the internet.
 
 **Interface Endpoints (Production)**
 - `com.amazonaws.us-east-1.ecr.dkr` - Pull images from Root account ECR
@@ -345,10 +322,9 @@ AWS PrivateLink connectivity for AWS services.
 - No data processing charges
 
 **Benefits**
-- AWS traffic on PrivateLink backbone
+- Traffic on AWS backbone
 - Lower data transfer costs
 - Simplified security group management
-- Compliance-friendly data flow
 
 ### Security Groups
 
@@ -357,19 +333,17 @@ Least-privilege firewall rules for each component:
 - Backend pods: Accept traffic from Internal ALB only
 - RDS: Accept traffic from application subnets only on port 5432
 - Internal ALB: Accept traffic with CloudFront custom header only
-- VPC Endpoints: Accept traffic from private subnets only
 
 ### AWS WAF Configuration
 
 Attached to CloudFront (edge protection):
-- AWS Managed Rules for OWASP Top 10
-- Rate limiting: 2000 requests per 5 minutes per IP
+- AWS WAF
+- Rate limiting
 - SQL injection and XSS protection
 - Bot detection and mitigation
-- DDoS protection via AWS Shield Standard (free)
 
 **Why CloudFront WAF Instead of ALB**
-- Blocks attacks at edge (200+ locations) before reaching VPC
+- Blocks attacks at edge before reaching VPC
 - Reduces data transfer costs to origin
 - Better performance for legitimate users
 - Lower latency (cached at edge)
@@ -399,19 +373,14 @@ Managed Kubernetes control plane with serverless container execution. No EC2 nod
 **Why EKS + Fargate**
 - Zero node management (no OS patching, capacity planning, or node failures)
 - Pay-per-pod pricing (no idle EC2 costs)
-- Built-in pod isolation (each pod in dedicated compute environment)
-- Simplified security model (no shared nodes to secure)
 - Automatic scaling based on pod resource requests
 - Focus on application, not infrastructure
 
 **Architecture Decision**
 - Fargate for all application workloads (frontend and backend)
-- Small managed node group (2× t3.small) for add-ons only
+- Small managed node group for add-ons only
 - No user workloads on managed nodes
-
-
-
-
+- IaC
 
 **AWS Load Balancer Controller**
 - Automatically creates Internal ALB from Kubernetes Ingress
@@ -426,7 +395,6 @@ Managed Kubernetes control plane with serverless container execution. No EC2 nod
 
 **Secrets Store CSI Driver**
 - Mounts secrets from AWS Secrets Manager as volumes
-
 - Automatic secret rotation support
 - Used for database credentials and API keys
 
@@ -516,50 +484,38 @@ Managed PostgreSQL with automated operations (backups, cross region backup rep´
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                Amazon RDS PostgreSQL Multi-AZ                  │
+│                Amazon RDS PostgreSQL Multi-AZ                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐              ┌─────────────────┐          │
-│  │   Primary DB    │◄────────────►│  Standby DB     │          │
-│  │   (AZ-1)        │ Sync Repl    │  (AZ-2)         │          │
-│  └─────────────────┘              └─────────────────┘          │
-│           │                                 │                  │
-│           └─────────── Automatic Failover < 60s ───────────┘   │
+│  ┌─────────────────┐              ┌─────────────────┐           │
+│  │   Primary DB    │◄────────────►│  Standby DB     │           │
+│  │   (AZ-1)        │ Sync Repl    │  (AZ-2)         │           │
+│  └─────────────────┘              └─────────────────┘           │
+│           │                                 │                   │
+│           └─────  Automatic Failover ───────┘                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 - Synchronous replication to standby
-- Automatic failover in < 60 seconds
+- Failover to second AZ 
 - Zero data loss on failover
-
+- Backup replication to other AWS region for disaster recovery
 
 ### Security
 
 **Encryption**
 - At rest: KMS encryption enabled by default
-- In transit: TLS 1.2+ enforced for all connections
+- In transit: TLS enforced for all connections
 - Backups: Encrypted with same KMS keys
 
 **Network Isolation**
 - Private subnets only 
 - Security groups: Accept traffic from application subnets
 
-
 **Access Control**
 - Credentials stored in AWS Secrets Manager
 - Mounted to pods via CSI Driver
-- Automatic credential rotation every 90 days
+- Automatic credential rotation
 - IAM database authentication available for admin access
-
-### Backup and Recovery
-
-**Automated Backups**
-
-
-
-**Recovery Testing**
-- Quarterly restore tests to verify backup integrity
-
-
 
 ---
 
@@ -582,11 +538,11 @@ User → Route 53 → CloudFront + WAF → Internal ALB → Frontend Pods (React
 
 **Benefits**
 
-- WAF at edge (200+ locations)
+- WAF at edge
 - Custom header validation (CloudFront → ALB)
-- 70-90% cache hit ratio
-- Compression (gzip/brotli)
-- Low latency (< 50ms cached)
+- Edge Cache
+- Compression
+- Low latency
 - Free SSL certificates
 
 ---
@@ -600,8 +556,8 @@ No static AWS credentials stored in GitHub. OIDC provider authenticates directly
 **Pipeline Flow**
 ```
 Code Commit → GitHub Actions → Security Scan → Build → Push ECR → Deploy EKS
-```
 
+```
 
 ---
 
@@ -617,16 +573,15 @@ Code Commit → GitHub Actions → Security Scan → Build → Push ECR → Depl
 - Network ACLs at subnet level
 
 **Application**
-- AWS WAF on CloudFront (OWASP Top 10)
+- AWS WAF on CloudFront
 - Custom header validation (CloudFront → ALB)
-- Rate limiting: 2000 req/5min per IP
-- DDoS protection (Shield Standard)
+- Rate limiting
 - Input validation
 - CI/CD security scanning (Snyk/Trivy)
 
 **Data**
 - KMS encryption at rest (RDS, EBS, S3)
-- TLS 1.2+ in transit
+- TLS in transit
 - Automatic key rotation
 
 **Identity & Access**
@@ -639,44 +594,13 @@ Code Commit → GitHub Actions → Security Scan → Build → Push ECR → Depl
 **Secrets**
 - AWS Secrets Manager
 - CSI Driver mounts to pods
-- 90-day rotation
+- Automated Key rotation
 - CloudTrail audit
 
 **Monitoring**
 - CloudTrail (organization-wide)
 - CloudWatch Logs and Alarms
 - Real-time dashboards
-
-**OWASP Top 10 Coverage**
-- A01 Broken Access Control: IAM least privilege, IRSA
-- A02 Cryptographic Failures: KMS, TLS 1.2+
-- A03 Injection: WAF rules, input validation
-- A04 Insecure Design: Private subnet architecture
-- A05 Security Misconfiguration: IaC, automated deployment
-- A06 Vulnerable Components: Snyk/Trivy CI/CD scanning
-- A07 Authentication Failures: Secrets Manager, MFA, OIDC
-- A08 Data Integrity: Image scanning, immutable infrastructure
-- A09 Logging Failures: CloudTrail, CloudWatch
-- A10 SSRF: Private network architecture
-
-### Future Security Enhancements
-
-To be added as revenue and compliance requirements grow:
-
-- **GuardDuty**: ML-based threat detection
-- **Security Hub**: Centralized security findings
-- **AWS Config**: Compliance monitoring and drift detection
-- **Inspector**: Container vulnerability scanning
-
-### Compliance Readiness
-
-Architecture supports:
-- SOC 2 Type II
-- GDPR (data residency, encryption, audit trails)
-- HIPAA (encryption, access controls, audit logging)
-- ISO 27001
-
-Current controls provide foundation for certification when business requires it.
 
 ---
 
@@ -688,7 +612,6 @@ Current controls provide foundation for certification when business requires it.
 - VPC Endpoints for AWS service connectivity
 - 2 AZ deployment balances HA with cost
 - Fargate pay-per-use (no idle resource costs)
-- Graviton processors for RDS (ARM-based cost savings)
 
 **Account Structure**
 - Root/Management: ECR storage, CloudTrail, Organizations
@@ -700,58 +623,10 @@ Current controls provide foundation for certification when business requires it.
 **Monitoring & Alerts**
 - AWS Budgets with threshold alerts
 - Cost Anomaly Detection enabled
-- Comprehensive resource tagging (`project`, `env`, `cost_center`)
-- Weekly Cost Explorer reviews
 
 **Optimization Practices**
 - Dev environment auto-shutdown (nights/weekends)
-- Quarterly right-sizing reviews
-- VPA recommendations for pod resources
 - CloudWatch metrics for usage tracking
-
-### Future Optimizations
-
-- Savings Plans for Fargate/RDS (1-year commitment)
-- Spot instances for batch/non-critical workloads
-- Reserved Instances for predictable workloads
-- CloudFront caching optimization
-
----
-
-## 10. Scaling Strategy
-
-### Growth Phases
-
-**Phase 1: 0-1K Users (Current)**
-- Fargate with minimal resources (2-4 pods per service)
-- RDS t4g.small Multi-AZ
-- 2 AZ deployment
-- Basic monitoring
-
-**Phase 2: 1K-10K Users**
-- HPA scales to 10 pods per service
-- RDS vertical scaling to db.r6g.large
-- Enhanced monitoring and alerting
-- Consider Savings Plans commitment
-
-**Phase 3: 10K-100K Users**
-- Add RDS read replicas for read-heavy workloads
-- Consider 3rd availability zone
-- Migrate to Aurora PostgreSQL
-- Add ElastiCache for session/query caching
-
-**Phase 4: 100K-1M Users**
-- Multi-region deployment (US + EU)
-- Aurora global database
-- Microservices architecture (separate backend services)
-- Event-driven architecture (SQS, EventBridge)
-- Advanced caching (CloudFront, ElastiCache, DAX)
-
-**Phase 5: 1M+ Users**
-- Global distribution (CloudFront + multi-region)
-- Service mesh (App Mesh or Istio)
-- Dedicated DDoS protection (Shield Advanced)
-- Advanced security services (GuardDuty, Security Hub, Config)
 
 ---
 
@@ -763,9 +638,9 @@ Production-ready, cost-optimized architecture for startups.
 
 **Security**
 - Private subnets for infrastructure
-- CloudFront + WAF (OWASP Top 10)
+- CloudFront + WAF
 - VPC Endpoints for AWS service access
-- KMS encryption at rest, TLS 1.2+ in transit
+- KMS encryption at rest, TLS in transit
 - IRSA, Secrets Manager, OIDC
 - CloudTrail audit logs
 
@@ -773,8 +648,7 @@ Production-ready, cost-optimized architecture for startups.
 - VPC Endpoints for efficient AWS connectivity
 - 2 AZ deployment balances HA with efficiency
 - Fargate pay-per-use model
-- Graviton processors for cost savings
-- CloudFront caching (70-90% hit ratio)
+- CloudFront caching
 
 **Operations**
 - Managed services (EKS, RDS, CloudFront)
@@ -785,23 +659,9 @@ Production-ready, cost-optimized architecture for startups.
 
 **High Availability**
 - 2 availability zones
-- RDS failover < 60s
-- CloudFront 99.99% SLA
+- RDS failover
+- CloudFront
 - Cross-zone load balancing
-
-**Scalability**
-- Phase 1: 0-1K users
-- Phase 5: 1M+ users
-- Migration paths: Aurora, multi-region, microservices
-
-**Compliance**
-- SOC 2, GDPR, HIPAA ready
-- Audit trails, encryption, network isolation
-
-### Key Features
-
-- Private subnet architecture with CloudFront edge
-- VPC Endpoints for AWS service access
-- Cost-optimized without sacrificing security
-- Scales 1000x without architectural rewrites
+- RDS bacck replication to second region
+- Terraformed infrastructure
 
