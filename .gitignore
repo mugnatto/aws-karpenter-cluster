@@ -8,3 +8,4 @@ terraform.tfvars.backup
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor\rules\snyk_rules.mdc
+.cursor/
