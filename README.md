@@ -1,87 +1,443 @@
-# AWS Cloud Infrastructure - Kubernetes & Architecture Design
+# AWS EKS with Karpenter Multi-Architecture Autoscaling
 
-This repository contains two distinct technical tasks related to Kubernetes infrastructure on AWS. Each task demonstrates different aspects of cloud architecture and DevOps practices.
+Production-ready EKS cluster with Karpenter supporting **both x86 and ARM64 (Graviton)** instances in a single NodePool. Karpenter automatically picks the cheapest option (usually ARM64).
 
-## Repository Structure
+## 🎯 What You Get
 
+- **EKS 1.34** cluster in dedicated VPC
+- **Karpenter 1.8.1** with intelligent autoscaling
+- **Single NodePool** supporting AMD64 + ARM64
+- **Spot instances** by default (up to 90% savings)
+- **Automatic cost optimization** (ARM64 ~20% cheaper)
+
+---
+
+## 📋 Prerequisites
+
+- AWS CLI configured with credentials
+- Terraform >= 1.0
+- kubectl >= 1.28
+
+---
+
+## 🚀 Deploy Infrastructure
+
+### Option A: Automated Deployment (Recommended)
+
+Use the automated script for one-command deployment:
+
+```bash
+cd 1-task
+chmod +x deploy.sh
+./deploy.sh
 ```
-aws-karpenter-cluster/
-├── 1-task/          # Task 1: EKS + Karpenter Infrastructure
-├── 2-task/          # Task 2: Architecture Design Document
-└── terraform/       # Reusable Terraform modules
+
+This script handles all steps automatically including:
+- Infrastructure deployment
+- kubectl configuration
+- Karpenter installation (2-phase)
+- CoreDNS fix
+- Verification
+
+**Time:** ~20 minutes total
+
+---
+
+### Option B: Manual Step-by-Step
+
+For more control, follow these manual steps:
+
+### Step 1: Deploy EKS Cluster
+
+```bash
+cd 1-task/1-infra
+terraform init
+terraform apply
+```
+
+**Time:** ~15 minutes
+
+### Step 2: Configure kubectl
+
+```bash
+export CLUSTER_NAME=$(terraform output -raw cluster_name)
+export AWS_REGION=$(terraform output -raw aws_region)
+aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+
+# Verify
+kubectl get nodes
+```
+
+### Step 3: Deploy Karpenter (2-phase process)
+
+```bash
+cd ../2-karpenter  # or 2-helm if not renamed
+terraform init
+
+# Phase 1: Install Karpenter + CRDs
+terraform apply -target=kubernetes_namespace.karpenter -target=helm_release.karpenter
+```
+
+**IMPORTANT: Fix CoreDNS scheduling (required)**
+
+CoreDNS pods start as Pending. Delete them to reschedule on Fargate:
+
+```bash
+# Delete CoreDNS pods
+kubectl delete pods -n kube-system -l k8s-app=kube-dns
+
+# Wait for them to be ready on Fargate
+kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=120s
+
+# Verify they're on Fargate
+kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+```
+
+**Then continue:**
+```bash
+# Phase 2: Create NodePool + NodeClass
+terraform apply
+```
+
+**Time:** ~3 minutes total
+
+### Step 4: Verify Installation
+
+```bash
+kubectl get pods -n karpenter
+kubectl get nodepools
+kubectl get ec2nodeclasses
 ```
 
 ---
 
-## Task 1: EKS Cluster with Karpenter and Multi-Architecture Support
+## 👨‍💻 Deploy Workloads
 
-**Objective**: Build initial Kubernetes infrastructure for a growing startup, leveraging advanced autoscaling with Karpenter and support for both x86 (AMD64) and ARM64 (Graviton) instances.
+### Automatic Architecture (Recommended)
 
-### Task 1 Scope
+Karpenter picks the cheapest option (usually ARM64):
 
-Infrastructure as Code (Terraform) implementation that provisions:
-- EKS Cluster (latest available version) in dedicated VPC
-- Karpenter configured with NodePools for x86 and ARM64 architectures
-- Documentation for developers to use the infrastructure
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-auto
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+```
 
-### Key Features
+```bash
+kubectl apply -f deployment.yaml
+kubectl get pods -o wide
+kubectl get nodes -L kubernetes.io/arch
+```
 
-- **Intelligent autoscaling** with Karpenter
-- **Multi-architecture**: AMD64 and ARM64 (Graviton) support
-- **Cost optimization** with Spot instances
-- **Bottlerocket OS** for enhanced security and performance
-- **Fargate** for system components (Karpenter, CoreDNS)
-- **Modern EKS Access Entries API** for authentication
+### Force x86 (AMD64)
 
-### Technology Stack
+Add `nodeSelector`:
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| **Amazon EKS** | 1.34 | Kubernetes control plane |
-| **Karpenter** | 1.8.1 | Kubernetes autoscaler |
-| **Bottlerocket OS** | 1.49.0 | Container-optimized OS |
-| **Terraform** | >= 1.0 | Infrastructure as Code |
-| **AWS Provider** | 6.18.0 | Terraform AWS provider |
-| **Kubernetes Provider** | 2.38.0 | Terraform Kubernetes provider |
+```yaml
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64  # Force x86
+      containers:
+      - name: app
+        image: my-app
+```
 
-### Location
+### Force Graviton (ARM64)
 
-Complete implementation is in the **`1-task/`** directory with specific README containing deployment instructions.
+Add `nodeSelector`:
+
+```yaml
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64  # Force Graviton
+      containers:
+      - name: app
+        image: my-app
+```
+
+**Note:** Images must support the target architecture.
+
+### Test with Examples
+
+```bash
+# Deploy all examples
+kubectl apply -f examples/
+
+# Check provisioned nodes
+kubectl get nodes -L kubernetes.io/arch
+
+# Verify pod architecture
+POD=$(kubectl get pods -l app=nginx-x86 -o jsonpath='{.items[0].metadata.name}')
+kubectl exec $POD -- uname -m
+# x86: outputs "x86_64"
+# ARM: outputs "aarch64"
+```
 
 ---
 
-## Task 2: Cloud Architecture Design Document for Startup
+## 🧹 Destroy Everything
 
-**Objective**: Create comprehensive architectural design document for a startup requiring web application deployment on AWS following best practices for security, scalability, and cost optimization.
+### Option A: Automated Cleanup (Recommended)
 
-### Task 2 Scope
+Use the automated script:
 
-Cloud architecture design covering:
-- **AWS Account Structure**: Multi-account strategy with AWS Organizations
-- **Network Design**: VPC, subnets, security groups, VPC Endpoints
-- **Compute Platform**: EKS with Fargate
-- **Database**: RDS PostgreSQL Multi-AZ
-- **CI/CD**: GitHub Actions with OIDC
-- **Security**: WAF, Secrets Manager, encryption, infosec compliance
-- **Monitoring & Costs**: CloudWatch, Cost Explorer
+```bash
+cd 1-task
+chmod +x destroy.sh
+./destroy.sh
+```
 
-### Target Application
+This script handles cleanup in the correct order:
+1. Deletes all workloads
+2. Waits for NodeClaims to terminate
+3. Destroys Karpenter
+4. Destroys infrastructure
 
-- **Backend**: Python/Flask (REST API)
-- **Frontend**: React (SPA)
-- **Database**: PostgreSQL
-- **Initial Traffic**: Few hundred users per day
-- **Expected Growth**: Potentially millions of users
-- **Data**: Sensitive user information
-- **Deployment**: Continuous CI/CD
+**Time:** ~15 minutes total
 
-### Architecture Characteristics
+---
 
-- **Security-first**: APP Sec pipeline, CloudFront + WAF, VPC Endpoints
-- **Cost-optimized**: Multi-account setup
-- **High availability**: Multi-AZ deployment, RDS failover
-- **Scalable**: Supports growth without architectural rewrites
+### Option B: Manual Cleanup
 
-### Location
+**Follow this order to avoid issues:**
 
-Complete architecture document in **`2-task/README.md`** with high-level diagrams.
+```bash
+# 1. Delete all workloads
+kubectl delete -f examples/
+# or
+kubectl delete deployment --all
+
+# 2. Wait for nodes to drain
+kubectl get nodeclaims
+# Wait until empty (may take 2-3 minutes)
+
+# 3. Destroy Karpenter
+cd 1-task/2-karpenter  # or 2-helm
+terraform destroy
+
+# 4. Destroy infrastructure
+cd ../1-infra
+terraform destroy
+```
+
+**Total cleanup time:** ~10 minutes
+
+---
+
+## 💡 How It Works
+
+### Single Multi-Arch NodePool
+
+Instead of separate NodePools for x86 and ARM64, we use **one intelligent NodePool**:
+
+```yaml
+requirements:
+  - key: kubernetes.io/arch
+    values: ["amd64", "arm64"]  # Both!
+```
+
+**Benefits:**
+- Karpenter automatically picks cheapest option
+- Better availability (more instance types available)
+- ARM64 usually 20% cheaper than x86
+- Automatic fallback if one arch unavailable
+
+### Cost Optimization
+
+| Strategy | Savings |
+|----------|---------|
+| Spot instances | Up to 90% |
+| ARM64 (Graviton) | ~20% |
+| Right-sizing | 10-30% |
+| Fast consolidation | 5-15% |
+| **Combined** | **50-70%** |
+
+---
+
+## 📁 Repository Structure
+
+```
+.
+├── 1-task/
+│   ├── 1-infra/          # VPC + EKS + IAM
+│   ├── 2-karpenter/      # Karpenter + NodePool
+│   └── terraform.tfvars
+│
+├── examples/             # Sample deployments
+│   ├── 01-auto-arch.yaml
+│   ├── 02-force-x86.yaml
+│   └── 03-force-graviton.yaml
+│
+└── terraform/modules/    # Reusable modules
+    ├── vpc/
+    ├── eks/
+    └── karpenter-iam/
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Pods stuck in Pending
+
+```bash
+# Check Karpenter logs
+kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter --tail=50
+
+# Check NodePool status
+kubectl describe nodepool multi-arch
+```
+
+### Karpenter pod crashlooping
+
+Usually DNS issue. Fix CoreDNS:
+
+```bash
+kubectl delete pods -n kube-system -l k8s-app=kube-dns
+kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=120s
+```
+
+### No nodes provisioning
+
+Check if NodePool is ready:
+
+```bash
+kubectl get nodepools
+kubectl get ec2nodeclasses
+kubectl describe ec2nodeclass multi-arch
+```
+
+---
+
+## 🔧 Configuration
+
+Edit `1-task/terraform.tfvars`:
+
+```hcl
+aws_region         = "us-east-1"
+environment        = "development"
+project_name       = "karpenter-cluster"
+kubernetes_version = "1.34"
+vpc_cidr           = "10.0.0.0/16"
+```
+
+---
+
+## 📚 Key Features
+
+### Automatic AMI Selection
+
+```yaml
+amiSelectorTerms:
+  - alias: "bottlerocket@latest"
+```
+
+Karpenter automatically picks the correct AMI:
+- `bottlerocket-x86_64` for AMD64 pods
+- `bottlerocket-aarch64` for ARM64 pods
+
+### Smart Instance Selection
+
+```yaml
+instance-category: ["c", "m", "t"]    # Any C/M/T family
+instance-generation: Gt "2"            # Gen 3+ only
+```
+
+Benefits:
+- New instance types automatically included
+- More diversity = better Spot availability
+- Zero maintenance
+
+### Security
+
+- IMDSv2 required
+- EBS encrypted by default
+- Bottlerocket OS (minimal attack surface)
+- IRSA for fine-grained IAM permissions
+- Nodes in private subnets
+
+---
+
+## 🎓 Multi-Arch Images
+
+Popular images that work on both architectures:
+- `nginx:latest`
+- `redis:latest`
+- `postgres:latest`
+- `node:latest`
+- `python:latest`
+
+Check if your image is multi-arch:
+```bash
+docker manifest inspect nginx:latest | jq '.manifests[].platform'
+```
+
+---
+
+## ⚡ Quick Reference
+
+### Essential Commands
+
+```bash
+# Get cluster info
+kubectl cluster-info
+
+# List nodes with architecture
+kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type
+
+# Check Karpenter status
+kubectl get pods -n karpenter
+
+# View NodePool
+kubectl get nodepools
+
+# Check provisioned nodes
+kubectl get nodeclaims
+
+# Karpenter logs
+kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter
+```
+
+---
+
+## 📝 Notes
+
+- **2-phase deploy required:** Helm chart installs CRDs needed by NodePool/NodeClass
+- **CoreDNS on Fargate:** System pods run on Fargate, not Karpenter-managed nodes
+- **Spot by default:** On-Demand used as fallback
+- **1-minute consolidation:** Underutilized nodes consolidated quickly
+- **7-day node expiration:** Nodes rotated automatically for security patches
+
+---
+
+## 🔗 References
+
+- [Karpenter Docs](https://karpenter.sh/docs/)
+- [AWS Graviton](https://github.com/aws/aws-graviton-getting-started)
+- [EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
+
+---
+
+**Ready to deploy?** Start with Step 1 above! 🚀

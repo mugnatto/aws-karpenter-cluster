@@ -1,0 +1,46 @@
+# Example 3: Force Graviton (ARM64) Architecture
+# Use when you want to ensure ARM64 for cost savings
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-graviton
+  labels:
+    app: nginx-graviton
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-graviton
+  template:
+    metadata:
+      labels:
+        app: nginx-graviton
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64  # Force ARM64/Graviton
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-graviton
+spec:
+  selector:
+    app: nginx-graviton
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+

@@ -13,25 +13,18 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   AWS EKS Karpenter Cluster - Complete Deployment          ║${NC}"
+echo -e "${BLUE}║   AWS EKS Karpenter Cluster - Automated Deployment         ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-
 
 # Check prerequisites
 echo -e "${YELLOW}📋 Checking prerequisites...${NC}"
 command -v terraform >/dev/null 2>&1 || { echo -e "${RED}❌ Terraform is required but not installed.${NC}" >&2; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}❌ kubectl is required but not installed.${NC}" >&2; exit 1; }
-command -v helm >/dev/null 2>&1 || { echo -e "${RED}❌ Helm is required but not installed.${NC}" >&2; exit 1; }
 command -v aws >/dev/null 2>&1 || { echo -e "${RED}❌ AWS CLI is required but not installed.${NC}" >&2; exit 1; }
 echo -e "${GREEN}✅ All prerequisites satisfied${NC}\n"
 
-# Stage 1: Infrastructure
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  STAGE 1/3: Deploying Infrastructure (VPC + EKS + IAM)${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-
-# Check if central tfvars exists (script is in 1-task/ directory)
+# Check if central tfvars exists
 if [ ! -f "terraform.tfvars" ]; then
     echo -e "${YELLOW}⚠️  terraform.tfvars not found. Using default values from variables.tf${NC}"
     echo -e "${YELLOW}💡 Copy terraform.tfvars.example to terraform.tfvars and customize it${NC}"
@@ -41,6 +34,13 @@ else
     TFVARS_FLAG="-var-file=../terraform.tfvars"
 fi
 
+# =============================================================================
+# STAGE 1: Infrastructure (VPC + EKS + IAM)
+# =============================================================================
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  STAGE 1/2: Deploying Infrastructure (VPC + EKS + IAM)${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+
 cd 1-infra
 
 if [ ! -d ".terraform" ]; then
@@ -48,7 +48,7 @@ if [ ! -d ".terraform" ]; then
     terraform init
 fi
 
-echo -e "${YELLOW}🚀 Deploying infrastructure...${NC}"
+echo -e "${YELLOW}🚀 Deploying infrastructure (this takes ~15 minutes)...${NC}"
 terraform apply $TFVARS_FLAG -auto-approve
 
 echo -e "${GREEN}✅ Stage 1 completed!${NC}"
@@ -67,50 +67,36 @@ echo -e "${GREEN}✅ kubectl configured!${NC}"
 kubectl get nodes
 echo ""
 
-# Stage 2: Karpenter Installation
+# =============================================================================
+# STAGE 2: Karpenter + NodePool (2-phase Terraform deployment)
+# =============================================================================
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  STAGE 2/3: Installing Karpenter via Helm${NC}"
+echo -e "${BLUE}  STAGE 2/2: Deploying Karpenter + Multi-Arch NodePool${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-cd ../2-helm
 
-echo -e "${YELLOW}🚀 Installing Karpenter...${NC}"
-chmod +x install-karpenter.sh
-./install-karpenter.sh
-
-echo -e "${GREEN}✅ Stage 2 completed!${NC}"
-echo -e "${YELLOW}📊 Karpenter status:${NC}"
-kubectl get pods -n karpenter
-echo ""
-
-# Stage 3: Karpenter Resources
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  STAGE 3/3: Creating NodePools and EC2NodeClasses${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-cd ../3-karpenter
+cd ../2-karpenter
 
 if [ ! -d ".terraform" ]; then
     echo -e "${YELLOW}🔧 Initializing Terraform...${NC}"
     terraform init
 fi
 
-echo -e "${YELLOW}🚀 Deploying Karpenter resources...${NC}"
-terraform apply -auto-approve
+# Phase 1: Install Karpenter Helm chart (creates CRDs)
+echo -e "${YELLOW}🚀 Phase 1: Installing Karpenter Helm chart...${NC}"
+terraform apply -target=kubernetes_namespace.karpenter -target=helm_release.karpenter -auto-approve
 
-echo -e "${GREEN}✅ Stage 3 completed!${NC}"
-echo -e "${YELLOW}📊 Karpenter resources:${NC}"
-kubectl get nodepools
-kubectl get ec2nodeclasses
+echo -e "${GREEN}✅ Karpenter Helm chart installed!${NC}"
 echo ""
 
-# Restart critical pods to ensure proper scheduling
+# Fix CoreDNS scheduling (REQUIRED)
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Restarting Critical Pods for Fargate Scheduling${NC}"
+echo -e "${BLUE}  REQUIRED: Fixing CoreDNS Scheduling on Fargate${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 
-echo -e "${YELLOW}🔄 Restarting CoreDNS to schedule on Fargate...${NC}"
+echo -e "${YELLOW}🔄 Deleting CoreDNS pods to reschedule on Fargate...${NC}"
 kubectl delete pods -n kube-system -l k8s-app=kube-dns --ignore-not-found=true
 
-echo -e "${YELLOW}⏳ Waiting for CoreDNS to become ready...${NC}"
+echo -e "${YELLOW}⏳ Waiting for CoreDNS to become ready (max 2 minutes)...${NC}"
 kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=120s
 
 echo -e "${GREEN}✅ CoreDNS is running on Fargate!${NC}"
@@ -124,26 +110,36 @@ echo -e "${GREEN}✅ Karpenter is healthy!${NC}"
 kubectl get pods -n karpenter -o wide
 echo ""
 
-# Deploy test workloads
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Deploying Test Workloads${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+# Phase 2: Create NodePool and EC2NodeClass
+echo -e "${YELLOW}🚀 Phase 2: Creating Multi-Arch NodePool and EC2NodeClass...${NC}"
+terraform apply -auto-approve
 
-echo -e "${YELLOW}🚀 Deploying AMD64 Spot workload...${NC}"
-kubectl apply -f ../instances/spot-deployment.yaml
-
-echo -e "${YELLOW}🚀 Deploying ARM64 Graviton workload...${NC}"
-kubectl apply -f ../instances/graviton-deployment.yaml
-
-echo -e "${YELLOW}⏳ Waiting for Karpenter to provision nodes...${NC}"
-sleep 30
-
-echo -e "${GREEN}✅ Test workloads deployed!${NC}"
-echo -e "${YELLOW}📊 Current status:${NC}"
-kubectl get nodes -o wide
+echo -e "${GREEN}✅ Stage 2 completed!${NC}"
+echo -e "${YELLOW}📊 Karpenter resources:${NC}"
+kubectl get nodepools
+kubectl get ec2nodeclasses
 echo ""
-kubectl get pods -o wide
-echo ""
+
+# Test deployment (optional)
+if [ -f "../instances/spot-deployment.yaml" ]; then
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  Deploying Test Workloads (Optional)${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    
+    echo -e "${YELLOW}🚀 Deploying test workloads...${NC}"
+    kubectl apply -f ../instances/spot-deployment.yaml 2>/dev/null || echo "  spot-deployment.yaml not found"
+    kubectl apply -f ../instances/graviton-deployment.yaml 2>/dev/null || echo "  graviton-deployment.yaml not found"
+    
+    echo -e "${YELLOW}⏳ Waiting for Karpenter to provision nodes (30s)...${NC}"
+    sleep 30
+    
+    echo -e "${GREEN}✅ Test workloads deployed!${NC}"
+    echo -e "${YELLOW}📊 Current status:${NC}"
+    kubectl get nodes -o wide
+    echo ""
+    kubectl get pods -o wide
+    echo ""
+fi
 
 # Summary
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -152,19 +148,15 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "${YELLOW}📋 Quick validation commands:${NC}"
 echo -e "  ${BLUE}# View all resources${NC}"
-echo -e "  kubectl get nodes,nodepools,nodeclaims,pods -o wide"
+echo -e "  kubectl get nodes,nodepools,nodeclaims -o wide"
 echo ""
-echo -e "  ${BLUE}# Test AMD64 pod architecture${NC}"
-echo -e "  AMD64_POD=\$(kubectl get pods -l app=spot-workload -o jsonpath='{.items[0].metadata.name}')"
-echo -e "  kubectl exec \$AMD64_POD -- uname -m  # Should output: x86_64"
+echo -e "  ${BLUE}# Deploy a test app${NC}"
+echo -e "  kubectl run nginx --image=nginx --requests=cpu=500m,memory=512Mi"
+echo -e "  kubectl get pods -w"
 echo ""
-echo -e "  ${BLUE}# Test Graviton pod architecture${NC}"
-echo -e "  ARM64_POD=\$(kubectl get pods -l app=graviton-workload -o jsonpath='{.items[0].metadata.name}')"
-echo -e "  kubectl exec \$ARM64_POD -- uname -m  # Should output: aarch64"
+echo -e "  ${BLUE}# Check node architecture${NC}"
+echo -e "  kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type"
 echo ""
-echo -e "  ${BLUE}# Run automated tests${NC}"
-echo -e "  ./test-deployment.sh  -  Note: It might take up to 5 minutes to complete"
-echo ""
-echo -e "${YELLOW}📝 To clean up:${NC}"
+echo -e "${YELLOW}📝 To clean up all resources:${NC}"
 echo -e "  ./destroy.sh"
 echo ""

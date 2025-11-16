@@ -1,0 +1,46 @@
+# Example 2: Force x86 (AMD64) Architecture
+# Use when your application only supports x86
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-x86
+  labels:
+    app: nginx-x86
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-x86
+  template:
+    metadata:
+      labels:
+        app: nginx-x86
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64  # Force x86 architecture
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-x86
+spec:
+  selector:
+    app: nginx-x86
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+

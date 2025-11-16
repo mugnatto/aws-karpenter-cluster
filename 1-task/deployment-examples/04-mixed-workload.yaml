@@ -1,0 +1,33 @@
+# Example 4: Mixed Workload
+# Some pods on x86, some on ARM64, all in one deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-workload
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: mixed-workload
+  template:
+    metadata:
+      labels:
+        app: mixed-workload
+    spec:
+      # No nodeSelector - let Karpenter distribute across architectures
+      topologySpreadConstraints:
+      - maxSkew: 2
+        topologyKey: kubernetes.io/arch
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: mixed-workload
+      containers:
+      - name: app
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+

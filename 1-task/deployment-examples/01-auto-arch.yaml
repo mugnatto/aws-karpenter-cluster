@@ -1,0 +1,44 @@
+# Example 1: Automatic Architecture Selection
+# Karpenter will choose the most cost-effective option (usually ARM64)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-auto
+  labels:
+    app: nginx-auto
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-auto
+  template:
+    metadata:
+      labels:
+        app: nginx-auto
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-auto
+spec:
+  selector:
+    app: nginx-auto
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
